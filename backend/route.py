@@ -1,9 +1,8 @@
 from sentence_transformers import SentenceTransformer
 from langchain_pinecone import PineconeVectorStore
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from pinecone import Pinecone
+from pinecone import Pinecone, ServerlessSpec
 import streamlit as st
-import os
 from openai import OpenAI
 from langchain.schema import Document
 from langchain_text_splitters import (
@@ -11,14 +10,30 @@ from langchain_text_splitters import (
     RecursiveCharacterTextSplitter,
 )
 
-pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])    # Connect to Pinecone
-index = pc.index("codebase-rag")    # Get the index
+# Initialize Pinecone correctly
+pc = Pinecone(api_key=st.secrets["PINECONE_API_KEY"])
+
+# Create index if it doesn't exist
+if "codebase-rag" not in pc.list_indexes().names():
+    pc.create_index(
+        name="codebase-rag",
+        dimension=768,  # dimension for all-mpnet-base-v2
+        metric="cosine",
+        spec=ServerlessSpec(
+            cloud="aws",
+            region="us-west-2"
+        )
+    )
+
+# Get index using Index() method
+index = pc.Index("codebase-rag")
 
 vectorstore = PineconeVectorStore(
-            index_name="codebase-rag", 
-            embedding=HuggingFaceEmbeddings(
-                 model_name="sentence-transformers/all-mpnet-base-v2"
-            ))   # Create a PineconeVectorStore object
+    index_name="codebase-rag", 
+    embedding=HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-mpnet-base-v2"
+    )
+)
 
 LANGUAGE_SPLITTER = {
     '.ts': Language.TS,
@@ -35,16 +50,42 @@ def get_language_from_extension(file_name):   # Function to get the language fro
     ext = st.path.splitext(file_name)[1]    # Get the file extension
     return LANGUAGE_SPLITTER.get(ext)       # Return the language
 
+# In backend/route.py - Update pinecone_feed function
+
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
 def pinecone_feed(file_content, repo_url):
     try:
+        # Initialize text splitter
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=200,
+            length_function=len,
+        )
+        
         documents = []
         for file in file_content:
-            doc = Document(
-                page_content=f"{file['name']}\n{file['content']}", 
-                metadata={"source": file['name']}
-            )
-            documents.append(doc)
+            # Split content into chunks
+            chunks = text_splitter.split_text(file['content'])
+            
+            # Create document for each chunk
+            for i, chunk in enumerate(chunks):
+                doc = Document(
+                    page_content=chunk,
+                    metadata={
+                        "source": file['name'],
+                        "chunk": i,
+                        "text": chunk  # Store chunk text in metadata
+                    }
+                )
+                documents.append(doc)
+            
+            print(f"Processed {file['name']}: {len(chunks)} chunks")
         
+        if not documents:
+            print("No documents to process")
+            return False
+            
         vectorstore = PineconeVectorStore.from_documents(
             documents=documents,
             embedding=HuggingFaceEmbeddings(
@@ -54,9 +95,14 @@ def pinecone_feed(file_content, repo_url):
             namespace=repo_url
         )
         return True
+        
     except Exception as e:
         print(f"Error in pinecone_feed: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return False
+    
+
 
 def get_huggingface_embeddings(text, model_name="sentence-transformers/all-mpnet-base-v2"): # Function to get the HuggingFace embeddings
     model = SentenceTransformer(model_name) # Create a SentenceTransformer object
