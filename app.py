@@ -1,6 +1,6 @@
 import streamlit as st
 
-st.title("Echo Bot")
+st.title("RAG Codebase Bot")
 
 with st.chat_message("assistant"):
     st.write("Hello Joseph 👋")
