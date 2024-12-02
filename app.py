@@ -16,7 +16,7 @@ if "repo_processed" not in st.session_state:
     st.session_state.repo_processed = False
 
 # Title and description
-st.title("🤖 Codebase RAG Bot")
+st.title(":globe_with_meridians: Codebase RAG Bot")
 st.write("Chat with your codebase using AI! Enter a GitHub repository URL to begin.")
 
 # Repository URL input
@@ -57,7 +57,7 @@ if st.session_state.repo_processed:
         # Get AI response
         with st.spinner("Thinking..."):
             try:
-                response = perform_rag(prompt)
+                response = perform_rag(prompt, repo_url)
                 
                 # Display assistant response
                 with st.chat_message("assistant"):

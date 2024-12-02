@@ -113,11 +113,11 @@ client = OpenAI(   # Create an OpenAI object
     api_key=st.secrets["GROQ_API_KEY"]  # Pass the API key
 )
 
-def perform_rag(query): # Function to perform RAG
+def perform_rag(query, repo_url): # Function to perform RAG
     raw_query_embedding = get_huggingface_embeddings(query)     # Get the HuggingFace embeddings
     print("Query embedding shape:", raw_query_embedding.shape) # Print the shape of the query embedding
 
-    top_matches = index.query(vector=raw_query_embedding.tolist(), top_k=5, include_metadata=True, namespace="https://github.com/CoderAgent/SecureAgent") # Get the top matches
+    top_matches = index.query(vector=raw_query_embedding.tolist(), top_k=5, include_metadata=True, namespace=str(repo_url)) # Get the top matches
     file_names = [item['metadata']['source'] for item in top_matches['matches']] # Get the file names
 
     contexts = [item['metadata']['text'] for item in top_matches['matches']] # Get the contexts
